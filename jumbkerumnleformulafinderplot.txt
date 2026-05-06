@@ -1,0 +1,1250 @@
+// =====================================================
+// 🔥 ULTIMATE SYMBOLIC AI ENGINE
+// FULL RESPONSIVE ANDROID VERSION
+// APDE / PROCESSING
+// AUTO FIT + AUTO SCALE + ZOOM SAFE
+// =====================================================
+
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
+
+// =====================================================
+// VIRTUAL CANVAS
+// =====================================================
+
+float BASE_W = 1000.0;
+float BASE_H = 1700.0;
+
+float uiScale;
+
+// =====================================================
+// DATA
+// =====================================================
+
+int maxRows = 20;
+
+float[] xs = new float[maxRows];
+float[] ys = new float[maxRows];
+
+boolean[] filled = new boolean[maxRows];
+
+int selectedRow = 0;
+boolean selectingX = true;
+
+String inputBuffer = "";
+
+// =====================================================
+// TRACKING
+// =====================================================
+
+String bestExprError = "None";
+String bestExprCorr = "None";
+
+float bestError = 1;
+float bestCorr = -1;
+
+Expr bestExprObj = null;
+
+int iterations = 0;
+boolean searching = false;
+
+// =====================================================
+// COPY
+// =====================================================
+
+String copiedMsg = "";
+int copiedTimer = 0;
+
+// =====================================================
+// RESPONSIVE UI POSITIONS
+// =====================================================
+
+float plotX = 20;
+float plotY = 1220;
+float plotW = 950;
+float plotH = 420;
+
+float keypadX = 450;
+float keypadY = 180;
+
+float keySize = 70;
+
+boolean dragging = false;
+
+float offsetX;
+float offsetY;
+
+// =====================================================
+// KEYS
+// =====================================================
+
+String[] keys = {
+  "7","8","9","/",
+  "4","5","6","*",
+  "1","2","3","-",
+  "0",".","OK","+",
+  "sin","cos","tan","^",
+  "log","exp","sqrt","abs",
+  "pi","e","DEL","CLR"
+};
+
+// =====================================================
+// SETUP
+// =====================================================
+
+void setup() {
+
+  fullScreen();
+
+  uiScale = min(width / BASE_W, height / BASE_H);
+
+  textSize(22);
+
+  smooth(8);
+}
+
+// =====================================================
+// DRAW
+// =====================================================
+
+void draw() {
+
+  background(245);
+
+  pushMatrix();
+
+  scale(uiScale);
+
+  drawTable();
+  drawButtons();
+  drawResults();
+  drawPlot();
+  drawKeypad();
+
+  if (searching) {
+    runSearchStep();
+  }
+
+  popMatrix();
+}
+
+// =====================================================
+// TOUCH CONVERSION
+// =====================================================
+
+float sx(float x) {
+  return x / uiScale;
+}
+
+float sy(float y) {
+  return y / uiScale;
+}
+
+// =====================================================
+// TABLE
+// =====================================================
+
+void drawTable() {
+
+  fill(0);
+
+  textSize(28);
+
+  text("SYMBOLIC AI ENGINE", 20, 30);
+
+  float startY = 50;
+
+  for (int i = 0; i < maxRows; i++) {
+
+    float y = startY + i * 40;
+
+    if (i == selectedRow) {
+      fill(200, 220, 255);
+    } else {
+      fill(255);
+    }
+
+    rect(20, y, 400, 35, 8);
+
+    fill(0);
+
+    String xt = filled[i] ? nf(xs[i], 1, 4) : "-";
+    String yt = filled[i] ? nf(ys[i], 1, 4) : "-";
+
+    text("X: " + xt, 30, y + 24);
+    text("Y: " + yt, 220, y + 24);
+  }
+
+  fill(0);
+
+  text("Editing : " + (selectingX ? "X" : "Y"), 450, 60);
+
+  text("Input:", 450, 100);
+
+  fill(255);
+
+  rect(450, 120, 500, 60, 10);
+
+  fill(0);
+
+  text(inputBuffer, 460, 160);
+}
+
+// =====================================================
+// BUTTONS
+// =====================================================
+
+void drawButtons() {
+
+  drawButton(
+    20,
+    900,
+    220,
+    70,
+    color(0, 180, 100),
+    "START SEARCH"
+  );
+
+  drawButton(
+    260,
+    900,
+    180,
+    70,
+    color(200, 50, 50),
+    "CLEAR"
+  );
+
+  drawButton(
+    460,
+    900,
+    260,
+    70,
+    color(50, 120, 255),
+    "RANDOM DATA"
+  );
+
+  drawButton(
+    740,
+    900,
+    220,
+    70,
+    color(180, 80, 255),
+    "STOP"
+  );
+}
+
+void drawButton(
+  float x,
+  float y,
+  float w,
+  float h,
+  color c,
+  String t
+) {
+
+  fill(c);
+
+  rect(x, y, w, h, 15);
+
+  fill(255);
+
+  textAlign(CENTER, CENTER);
+
+  text(t, x + w / 2, y + h / 2);
+
+  textAlign(LEFT, BASELINE);
+}
+
+// =====================================================
+// RESULTS
+// =====================================================
+
+void drawResults() {
+
+  float y = 1000;
+
+  fill(0);
+
+  text("BEST ERROR MODEL:", 20, y);
+
+  fill(0, 0, 255);
+
+  text(bestExprError, 20, y + 40);
+
+  fill(0);
+
+  text("ERROR = " + nf(bestError, 1, 6), 20, y + 80);
+
+  text("BEST CORRELATION MODEL:", 20, y + 140);
+
+  fill(0, 0, 255);
+
+  text(bestExprCorr, 20, y + 180);
+
+  fill(0);
+
+  text("R = " + nf(bestCorr, 1, 6), 20, y + 220);
+
+  text("ITERATIONS = " + iterations, 20, y + 260);
+
+  if (copiedTimer > 0) {
+
+    fill(0, 150, 0);
+
+    text("COPIED : " + copiedMsg, 20, y + 320);
+
+    copiedTimer--;
+  }
+}
+
+// =====================================================
+// PLOT
+// =====================================================
+
+void drawPlot() {
+
+  fill(255);
+
+  stroke(0);
+
+  rect(plotX, plotY, plotW, plotH, 12);
+
+  int n = 0;
+
+  float xmin = 999999;
+  float xmax = -999999;
+
+  float ymin = 999999;
+  float ymax = -999999;
+
+  for (int i = 0; i < maxRows; i++) {
+
+    if (filled[i]) {
+
+      xmin = min(xmin, xs[i]);
+      xmax = max(xmax, xs[i]);
+
+      ymin = min(ymin, ys[i]);
+      ymax = max(ymax, ys[i]);
+
+      n++;
+    }
+  }
+
+  if (n < 2) return;
+
+  float dx = xmax - xmin;
+  float dy = ymax - ymin;
+
+  if (dx < 1e-6) dx = 1;
+  if (dy < 1e-6) dy = 1;
+
+  xmin -= dx * 0.1;
+  xmax += dx * 0.1;
+
+  ymin -= dy * 0.1;
+  ymax += dy * 0.1;
+
+  stroke(180);
+
+  float zeroX = map(
+    0,
+    xmin,
+    xmax,
+    plotX,
+    plotX + plotW
+  );
+
+  float zeroY = map(
+    0,
+    ymin,
+    ymax,
+    plotY + plotH,
+    plotY
+  );
+
+  line(plotX, zeroY, plotX + plotW, zeroY);
+
+  line(zeroX, plotY, zeroX, plotY + plotH);
+
+  fill(255, 0, 0);
+
+  noStroke();
+
+  for (int i = 0; i < maxRows; i++) {
+
+    if (filled[i]) {
+
+      float px = map(
+        xs[i],
+        xmin,
+        xmax,
+        plotX,
+        plotX + plotW
+      );
+
+      float py = map(
+        ys[i],
+        ymin,
+        ymax,
+        plotY + plotH,
+        plotY
+      );
+
+      ellipse(px, py, 12, 12);
+    }
+  }
+
+  if (bestExprObj != null) {
+
+    stroke(0, 0, 255);
+
+    noFill();
+
+    beginShape();
+
+    for (int i = 0; i < 600; i++) {
+
+      float x = map(i, 0, 599, xmin, xmax);
+
+      float y = bestExprObj.eval(x);
+
+      if (Float.isNaN(y)) continue;
+
+      if (abs(y) > 1e6) continue;
+
+      float px = map(
+        x,
+        xmin,
+        xmax,
+        plotX,
+        plotX + plotW
+      );
+
+      float py = map(
+        y,
+        ymin,
+        ymax,
+        plotY + plotH,
+        plotY
+      );
+
+      vertex(px, py);
+    }
+
+    endShape();
+  }
+}
+
+// =====================================================
+// KEYPAD
+// =====================================================
+
+void drawKeypad() {
+
+  pushMatrix();
+
+  translate(keypadX, keypadY);
+
+  int cols = 4;
+
+  for (int i = 0; i < keys.length; i++) {
+
+    int col = i % cols;
+    int row = i / cols;
+
+    float x = col * keySize;
+    float y = row * keySize;
+
+    fill(220);
+
+    rect(x, y, keySize, keySize, 10);
+
+    fill(0);
+
+    textAlign(CENTER, CENTER);
+
+    text(
+      keys[i],
+      x + keySize / 2,
+      y + keySize / 2
+    );
+  }
+
+  popMatrix();
+
+  textAlign(LEFT, BASELINE);
+}
+
+// =====================================================
+// TOUCH / MOUSE
+// =====================================================
+
+void mousePressed() {
+
+  float mx = sx(mouseX);
+  float my = sy(mouseY);
+
+  // START SEARCH
+
+  if (
+    mx > 20 &&
+    mx < 240 &&
+    my > 900 &&
+    my < 970
+  ) {
+
+    searching = true;
+    return;
+  }
+
+  // CLEAR
+
+  if (
+    mx > 260 &&
+    mx < 440 &&
+    my > 900 &&
+    my < 970
+  ) {
+
+    clearAll();
+    return;
+  }
+
+  // RANDOM DATA
+
+  if (
+    mx > 460 &&
+    mx < 720 &&
+    my > 900 &&
+    my < 970
+  ) {
+
+    generateRandomData();
+    return;
+  }
+
+  // STOP
+
+  if (
+    mx > 740 &&
+    mx < 960 &&
+    my > 900 &&
+    my < 970
+  ) {
+
+    searching = false;
+    return;
+  }
+
+  // TABLE SELECTION
+
+  float startY = 50;
+
+  for (int i = 0; i < maxRows; i++) {
+
+    float y = startY + i * 40;
+
+    if (
+      mx > 20 &&
+      mx < 420 &&
+      my > y &&
+      my < y + 35
+    ) {
+
+      selectedRow = i;
+      return;
+    }
+  }
+
+  // KEYPAD HIT TEST
+
+  int cols = 4;
+
+  for (int i = 0; i < keys.length; i++) {
+
+    int col = i % cols;
+    int row = i / cols;
+
+    float x = keypadX + col * keySize;
+    float y = keypadY + row * keySize;
+
+    if (
+      mx > x &&
+      mx < x + keySize &&
+      my > y &&
+      my < y + keySize
+    ) {
+
+      handleKey(keys[i]);
+
+      return;
+    }
+  }
+
+  // DRAG KEYPAD
+
+  if (
+    mx > keypadX &&
+    mx < keypadX + 4 * keySize &&
+    my > keypadY &&
+    my < keypadY + 8 * keySize
+  ) {
+
+    dragging = true;
+
+    offsetX = mx - keypadX;
+    offsetY = my - keypadY;
+  }
+}
+
+void mouseDragged() {
+
+  if (dragging) {
+
+    keypadX = sx(mouseX) - offsetX;
+    keypadY = sy(mouseY) - offsetY;
+  }
+}
+
+void mouseReleased() {
+
+  dragging = false;
+}
+
+// =====================================================
+// HANDLE KEYS
+// =====================================================
+
+void handleKey(String k) {
+
+  if (k.equals("DEL")) {
+
+    if (inputBuffer.length() > 0) {
+
+      inputBuffer = inputBuffer.substring(
+        0,
+        inputBuffer.length() - 1
+      );
+    }
+  }
+
+  else if (k.equals("CLR")) {
+
+    inputBuffer = "";
+  }
+
+  else if (k.equals("OK")) {
+
+    if (inputBuffer.length() > 0) {
+
+      float val = parseValue(inputBuffer);
+
+      if (selectingX) {
+
+        xs[selectedRow] = val;
+
+        selectingX = false;
+      }
+
+      else {
+
+        ys[selectedRow] = val;
+
+        filled[selectedRow] = true;
+
+        selectingX = true;
+
+        selectedRow = min(
+          selectedRow + 1,
+          maxRows - 1
+        );
+      }
+
+      inputBuffer = "";
+    }
+  }
+
+  else if (
+    k.equals("sin") ||
+    k.equals("cos") ||
+    k.equals("tan") ||
+    k.equals("log") ||
+    k.equals("exp") ||
+    k.equals("sqrt") ||
+    k.equals("abs")
+  ) {
+
+    inputBuffer += k + "(";
+  }
+
+  else if (
+    k.equals("pi") ||
+    k.equals("e")
+  ) {
+
+    inputBuffer += k;
+  }
+
+  else {
+
+    inputBuffer += k;
+  }
+}
+
+// =====================================================
+// PARSE VALUE
+// =====================================================
+
+float parseValue(String s) {
+
+  s = trim(s);
+
+  if (s.equals("pi")) return PI;
+
+  if (s.equals("e")) return 2.7182818;
+
+  return float(s);
+}
+
+// =====================================================
+// RANDOM DATA
+// =====================================================
+
+void generateRandomData() {
+
+  clearAll();
+
+  int mode = int(random(8));
+
+  float scaleX = pow(10, random(-2, 5));
+  float scaleY = pow(10, random(-2, 5));
+
+  float chaos = random(0.1, 0.9);
+  float r = random(3.7, 4.0);
+
+  for (int i = 0; i < maxRows; i++) {
+
+    float t = map(
+      i,
+      0,
+      maxRows - 1,
+      -1,
+      1
+    );
+
+    float x = t * scaleX;
+
+    float y = 0;
+
+    if (mode == 0) {
+
+      y = (
+        0.2 * x * x +
+        0.01 * x * x * x
+      ) * scaleY;
+    }
+
+    else if (mode == 1) {
+
+      y = (
+        sin(x * 0.01) +
+        0.5 * cos(x * 0.1) +
+        0.25 * sin(x)
+      ) * scaleY;
+    }
+
+    else if (mode == 2) {
+
+      y = exp(x * 0.0001) * scaleY;
+    }
+
+    else if (mode == 3) {
+
+      chaos = r * chaos * (1 - chaos);
+
+      y = chaos * scaleY;
+    }
+
+    else if (mode == 4) {
+
+      y = sqrt(abs(x)) * scaleY;
+    }
+
+    else if (mode == 5) {
+
+      y = log(abs(x) + 1) * scaleY;
+    }
+
+    else if (mode == 6) {
+
+      y = (
+        pow(x, 2) *
+        sin(x * 0.01) *
+        0.001 *
+        scaleY
+      );
+    }
+
+    else {
+
+      y = (
+        sin(x * 0.05) +
+        0.3 * sin(x * 0.5) +
+        chaos
+      ) * scaleY;
+    }
+
+    y += random(-0.05, 0.05) * scaleY;
+
+    xs[i] = x;
+    ys[i] = y;
+
+    filled[i] = true;
+  }
+}
+
+// =====================================================
+// SEARCH
+// =====================================================
+
+void runSearchStep() {
+
+  for (int i = 0; i < 400; i++) {
+
+    Expr e = randomExpr(5);
+
+    float err = computeError(e);
+
+    float corr = computeCorrelation(e);
+
+    iterations++;
+
+    if (err < bestError) {
+
+      bestError = err;
+
+      bestExprError = e.toString();
+
+      bestExprObj = e;
+    }
+
+    if (
+      corr > bestCorr &&
+      err < bestError * 2
+    ) {
+
+      bestCorr = corr;
+
+      bestExprCorr = e.toString();
+    }
+  }
+}
+
+// =====================================================
+// EXPRESSION ENGINE
+// =====================================================
+
+class Expr {
+
+  int type;
+
+  float val;
+
+  String op;
+
+  Expr left;
+  Expr right;
+
+  // VARIABLE X
+
+  Expr() {
+
+    type = 0;
+  }
+
+  // CONSTANT
+
+  Expr(float v) {
+
+    type = 1;
+
+    val = v;
+  }
+
+  // BINARY
+
+  Expr(String op, Expr a, Expr b) {
+
+    type = 2;
+
+    this.op = op;
+
+    left = a;
+    right = b;
+  }
+
+  // UNARY
+
+  Expr(String op, Expr a) {
+
+    type = 3;
+
+    this.op = op;
+
+    left = a;
+  }
+
+  float eval(float x) {
+
+    if (type == 0) return x;
+
+    if (type == 1) return val;
+
+    float a = left.eval(x);
+
+    float b = (
+      right != null
+    ) ? right.eval(x) : 0;
+
+    if (
+      Float.isNaN(a) ||
+      Float.isNaN(b)
+    ) {
+      return 0;
+    }
+
+    if (
+      abs(a) > 1e6 ||
+      abs(b) > 1e6
+    ) {
+      return 0;
+    }
+
+    float r = 0;
+
+    // BINARY
+
+    if (type == 2) {
+
+      if (op.equals("+")) {
+
+        r = a + b;
+      }
+
+      else if (op.equals("-")) {
+
+        r = a - b;
+      }
+
+      else if (op.equals("*")) {
+
+        r = a * b;
+      }
+
+      else if (op.equals("/")) {
+
+        if (abs(b) < 1e-6) {
+          return 0;
+        }
+
+        r = a / b;
+      }
+
+      else if (op.equals("^")) {
+
+        b = constrain(b, -4, 4);
+
+        r = pow(abs(a), b);
+      }
+    }
+
+    // UNARY
+
+    else if (type == 3) {
+
+      if (op.equals("sin")) {
+
+        r = sin(a);
+      }
+
+      else if (op.equals("cos")) {
+
+        r = cos(a);
+      }
+
+      else if (op.equals("tan")) {
+
+        if (abs(cos(a)) < 1e-3) {
+          return 0;
+        }
+
+        r = tan(a);
+      }
+
+      else if (op.equals("exp")) {
+
+        if (a > 10) {
+          return 0;
+        }
+
+        r = exp(a);
+      }
+
+      else if (op.equals("log")) {
+
+        if (a <= 0) {
+          return 0;
+        }
+
+        r = log(a);
+      }
+
+      else if (op.equals("sqrt")) {
+
+        if (a < 0) {
+          return 0;
+        }
+
+        r = sqrt(a);
+      }
+
+      else if (op.equals("abs")) {
+
+        r = abs(a);
+      }
+    }
+
+    if (
+      Float.isNaN(r) ||
+      abs(r) > 1e6
+    ) {
+      return 0;
+    }
+
+    return r;
+  }
+
+  public String toString() {
+
+    if (type == 0) {
+      return "x";
+    }
+
+    if (type == 1) {
+      return nf(val, 1, 2);
+    }
+
+    if (type == 3) {
+      return op + "(" + left + ")";
+    }
+
+    return "(" + left + op + right + ")";
+  }
+}
+
+// =====================================================
+// RANDOM EXPRESSION
+// =====================================================
+
+Expr randomExpr(int d) {
+
+  if (d == 0) {
+
+    float r = random(1);
+
+    if (r < 0.5) {
+      return new Expr();
+    }
+
+    if (r < 0.8) {
+      return new Expr(random(-5, 5));
+    }
+
+    if (random(1) < 0.5) {
+      return new Expr(PI);
+    }
+
+    return new Expr(2.71828);
+  }
+
+  int choice = int(random(10));
+
+  if (choice <= 5) {
+
+    String[] ops = {
+      "+",
+      "-",
+      "*",
+      "/",
+      "^"
+    };
+
+    return new Expr(
+      ops[int(random(ops.length))],
+      randomExpr(d - 1),
+      randomExpr(d - 1)
+    );
+  }
+
+  else {
+
+    String[] ops = {
+      "sin",
+      "cos",
+      "tan",
+      "exp",
+      "log",
+      "sqrt",
+      "abs"
+    };
+
+    return new Expr(
+      ops[int(random(ops.length))],
+      randomExpr(d - 1)
+    );
+  }
+}
+
+// =====================================================
+// ERROR
+// =====================================================
+
+float computeError(Expr e) {
+
+  float err = 0;
+
+  int n = 0;
+
+  for (int i = 0; i < maxRows; i++) {
+
+    if (filled[i]) {
+
+      float p = e.eval(xs[i]);
+
+      float y = ys[i];
+
+      float diff =
+        (p - y) / (abs(y) + 1);
+
+      err += diff * diff;
+
+      n++;
+    }
+  }
+
+  if (n == 0) return 1;
+
+  return constrain(
+    sqrt(err / n),
+    0,
+    1
+  );
+}
+
+// =====================================================
+// CORRELATION
+// =====================================================
+
+float computeCorrelation(Expr e) {
+
+  float sx = 0;
+  float sy = 0;
+
+  float sxy = 0;
+
+  float sx2 = 0;
+  float sy2 = 0;
+
+  int n = 0;
+
+  for (int i = 0; i < maxRows; i++) {
+
+    if (filled[i]) {
+
+      float yt = ys[i];
+
+      float yp = e.eval(xs[i]);
+
+      sx += yp;
+      sy += yt;
+
+      sxy += yp * yt;
+
+      sx2 += yp * yp;
+      sy2 += yt * yt;
+
+      n++;
+    }
+  }
+
+  if (n < 2) return 0;
+
+  float num =
+    n * sxy - sx * sy;
+
+  float den = sqrt(
+    (n * sx2 - sx * sx) *
+    (n * sy2 - sy * sy)
+  );
+
+  if (abs(den) < 1e-6) {
+    return 0;
+  }
+
+  return num / den;
+}
+
+// =====================================================
+// COPY TO CLIPBOARD
+// =====================================================
+
+void copyToClipboard(String text) {
+
+  if (text.equals("None")) return;
+
+  ClipboardManager clipboard =
+    (ClipboardManager)
+    getActivity().getSystemService(
+      Context.CLIPBOARD_SERVICE
+    );
+
+  ClipData clip =
+    ClipData.newPlainText(
+      "model",
+      text
+    );
+
+  clipboard.setPrimaryClip(clip);
+
+  copiedMsg = text;
+
+  copiedTimer = 120;
+}
+
+// =====================================================
+// CLEAR
+// =====================================================
+
+void clearAll() {
+
+  for (int i = 0; i < maxRows; i++) {
+
+    filled[i] = false;
+  }
+
+  inputBuffer = "";
+
+  bestExprError = "None";
+  bestExprCorr = "None";
+
+  bestError = 1;
+  bestCorr = -1;
+
+  bestExprObj = null;
+
+  iterations = 0;
+
+  searching = false;
+}
